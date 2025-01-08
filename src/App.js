@@ -72,7 +72,7 @@ function App() {
 
   useEffect(() => {
     let timer;
-    if (timerActive && timeLeft > 0) {
+    if (timerActive && !gameOver && !gameWon && timeLeft > 0) {
       timer = setInterval(() => {
         setTimeLeft(prev => {
           if (prev <= 1) {
@@ -85,7 +85,7 @@ function App() {
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [timerActive, timeLeft]);
+  }, [timerActive, gameOver, gameWon, timeLeft]);
 
   useEffect(() => {
     initializeBoard();
@@ -156,15 +156,39 @@ function App() {
     setBoard(newBoard);
   };
 
+  const checkWinCondition = (board) => {
+    // Count revealed non-mine cells
+    const totalNonMines = boardSize * boardSize - mineCount;
+    const revealedNonMines = board.flat().filter(cell => !cell.isMine && cell.isRevealed).length;
+    
+    // Win if all non-mine cells are revealed
+    if (revealedNonMines === totalNonMines) {
+      // Flag any remaining unflagged mines
+      board.forEach((row, rowIndex) => {
+        row.forEach((cell, colIndex) => {
+          if (cell.isMine && !cell.isFlagged) {
+            board[rowIndex][colIndex].isFlagged = true;
+            setFlagCount(prevCount => prevCount + 1);
+          }
+        });
+      });
+      setGameWon(true);
+      return true;
+    }
+    return false;
+  };
+
   const handleCellClick = (row, col) => {
-    if (gameOver || gameWon || board[row][col].isFlagged) return;
+    if (gameOver || gameWon || board[row][col].isFlagged) {
+      return;
+    }
 
     // Start timer on first click
     if (!timerActive) {
       setTimerActive(true);
     }
 
-    const newBoard = [...board];
+    const newBoard = [...board.map(row => [...row])];
     if (newBoard[row][col].isMine) {
       revealAllMines();
       setGameOver(true);
@@ -181,7 +205,7 @@ function App() {
     e.preventDefault();
     if (gameOver || gameWon || board[row][col].isRevealed) return;
 
-    const newBoard = [...board];
+    const newBoard = [...board.map(row => [...row])];
     const newFlagState = !newBoard[row][col].isFlagged;
     newBoard[row][col].isFlagged = newFlagState;
     setBoard(newBoard);
@@ -213,72 +237,6 @@ function App() {
       }))
     );
     setBoard(newBoard);
-  };
-
-  const checkWinCondition = (board) => {
-    // Count unrevealed cells and unflagged mines
-    let unrevealedCount = 0;
-    let unrevealedNonMines = 0;
-    let lastUnrevealedPosition = null;
-
-    for (let i = 0; i < boardSize; i++) {
-      for (let j = 0; j < boardSize; j++) {
-        if (!board[i][j].isRevealed) {
-          unrevealedCount++;
-          lastUnrevealedPosition = { i, j };
-          if (!board[i][j].isMine) {
-            unrevealedNonMines++;
-          }
-        }
-      }
-    }
-
-    // If only mines are left unrevealed, auto-flag them
-    if (unrevealedCount > 0 && unrevealedNonMines === 0) {
-      const newBoard = board.map(row =>
-        row.map(cell => ({
-          ...cell,
-          isFlagged: !cell.isRevealed && cell.isMine ? true : cell.isFlagged
-        }))
-      );
-      setBoard(newBoard);
-      setFlagCount(mineCount);
-      setGameWon(true);
-      return;
-    }
-
-    // If only one unrevealed cell remains and it's a mine, flag it
-    if (unrevealedCount === 1 && lastUnrevealedPosition && board[lastUnrevealedPosition.i][lastUnrevealedPosition.j].isMine) {
-      const newBoard = [...board];
-      const cell = newBoard[lastUnrevealedPosition.i][lastUnrevealedPosition.j];
-      if (!cell.isFlagged) {
-        cell.isFlagged = true;
-        setBoard(newBoard);
-        setFlagCount(prevCount => prevCount + 1);
-        setGameWon(true);
-      }
-      return;
-    }
-
-    // Check win condition
-    const won = board.every(row =>
-      row.every(cell =>
-        (cell.isMine && !cell.isRevealed) || (!cell.isMine && cell.isRevealed)
-      )
-    );
-    
-    if (won) {
-      // Flag all remaining mines when won
-      const newBoard = board.map(row =>
-        row.map(cell => ({
-          ...cell,
-          isFlagged: cell.isMine ? true : cell.isFlagged
-        }))
-      );
-      setBoard(newBoard);
-      setGameWon(true);
-      setFlagCount(mineCount);
-    }
   };
 
   const resetGame = () => {
